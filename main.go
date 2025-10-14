@@ -83,7 +83,7 @@ func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		b.WriteString("\n")
 	}
 	b.WriteString("</pre><hr>")
-	b.WriteTo(w)
+	w.Write([]byte(b.String())) 
 }
 
 func main() {
