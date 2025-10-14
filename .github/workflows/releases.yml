@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: write
-  
+
 jobs:
 
   build:
@@ -18,12 +18,12 @@ jobs:
       with:
         go-version-file: go.mod
 
-    - run: chmod +x build.sh && ./build.sh
-
     - run: |
         mkdir dist
-        tar -czvf dist/sfs-linux-amd64.tar.gz sfs
-        mv sfs.exe dist/sfs-windows-amd64.exe
+        GOOS=windows GOARCH=amd64 go build -ldflags="$flags" -o dist/fileserver-windows-amd64.exe
+        GOOS=darwin GOARCH=arm64 go build -ldflags="$flags" -o dist/fileserver-darwin-arm64
+        GOOS=linux GOARCH=amd64 go build -ldflags="$flags" -o dist/fileserver-linux-amd64
+        GOOS=android GOARCH=arm64 go build -ldflags="$flags" -o dist/fileserver-android-arm64
 
     - uses: softprops/action-gh-release@v2
       env:
