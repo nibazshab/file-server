@@ -1,0 +1,32 @@
+name: latest build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - run: |
+        mkdir dist
+
+        GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/fileserver-windows-amd64.exe
+        GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/fileserver-darwin-arm64
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/fileserver-linux-amd64
+        GOOS=android GOARCH=arm64 go build -ldflags="-s -w" -o dist/fileserver-android-arm64
+
+    - uses: softprops/action-gh-release@v2
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: latest
+        files: dist/*
