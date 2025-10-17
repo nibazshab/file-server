@@ -47,30 +47,32 @@ func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return strings.Compare(strings.ToLower(a.Name()), strings.ToLower(b.Name()))
 	})
 
-	var b strings.Builder
-
 	padding := make([]byte, 51)
 	for i := range padding {
 		padding[i] = ' '
 	}
 
-	of := "Index of " + req.URL.Path
-	b.WriteString(fmt.Sprintf("<title>%s</title><h1>%s</h1>", of, of))
-	b.WriteString("<hr><pre><a href=\"../\">../</a>\n")
+	var b strings.Builder
 
-	for _, d := range entries {
+	top := "Index of " + req.URL.Path
+	b.WriteString(fmt.Sprintf("<title>%s</title><h1>%s</h1><hr>", top, top))
+	b.WriteString("<pre><a href=\"../\">../</a>\n")
+
+	for _, entry := range entries {
 		var i, j int
 		var name, size, time string
 
-		l, _ := d.Info()
-		if l.IsDir() {
-			name = l.Name() + "/"
+		e, _ := entry.Info()
+
+		if e.IsDir() {
+			name = e.Name() + "/"
 			size = "-"
 		} else {
-			name = l.Name()
-			size = strconv.FormatInt(l.Size(), 10)
+			name = e.Name()
+			size = strconv.FormatInt(e.Size(), 10)
 		}
-		time = l.ModTime().Format("02-Jan-2006 15:04")
+
+		time = e.ModTime().Format("02-Jan-2006 15:04")
 
 		i = max(51-len(name), 1)
 		j = max(20-len(size), 1)
@@ -82,6 +84,7 @@ func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		b.WriteString(size)
 		b.WriteString("\n")
 	}
+
 	b.WriteString("</pre><hr>")
 	w.Write([]byte(b.String())) 
 }
