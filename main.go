@@ -90,15 +90,17 @@ func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	port := flag.String("port", "8080", "server port")
-	path := flag.String("path", "./", "server path")
+	var port, path string
+
+	flag.StringVar(&port, "port", "8080", "server port")
+    flag.StringVar(&path, "path", "./", "server path")
 	flag.Parse()
 
-	fmt.Printf("@ %s, @ 0.0.0.0:%s\n", *path, *port)
+	path, _ = filepath.Abs(path)
+	rootfs, _ := os.OpenRoot(path)
 
-	*path, _ = filepath.Abs(*path)
-	rootfs, _ := os.OpenRoot(*path)
+	fmt.Printf("0.0.0.0:%s, %s\n", port, path)
 
 	http.Handle("/", &fileHandler{root: rootfs})
-	http.ListenAndServe(":"+*port, nil)
+	http.ListenAndServe(":"+port, nil)
 }
