@@ -99,7 +99,7 @@ func main() {
 	path, _ = filepath.Abs(path)
 	rootfs, _ := os.OpenRoot(path)
 
-	fmt.Printf("0.0.0.0:%s, %s\n", port, path)
+	fmt.Printf("ipv4/[ipv6]:%s, %s\n", port, path)
 
 	http.Handle("/", &fileHandler{root: rootfs})
 	http.ListenAndServe(":"+port, nil)
