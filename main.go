@@ -119,14 +119,15 @@ func (wd webdavFs) OpenFile(ctx context.Context, name string, flag int, perm os.
 func main() {
 	var port, path, davPort string
 
-	flag.StringVar(&port, "port", "8080", "http server port")
 	flag.StringVar(&davPort, "dav-port", "8081", "webdav server port")
+	flag.StringVar(&port, "port", "8080", "http server port")
 	flag.StringVar(&path, "path", "./", "server path")
 	flag.Parse()
 
 	path, _ = filepath.Abs(path)
+	fmt.Printf("PATH: %s\n", path)
 
-	{
+	go func() {
 		davHandler := &webdav.Handler{
 			FileSystem: webdavFs{
 				FileSystem: webdav.Dir(path),
@@ -134,18 +135,16 @@ func main() {
 			LockSystem: webdav.NewMemLS(),
 		}
 
-		go func() {
-			fmt.Printf("WebDAV: http://[ipv4/ipv6]:%s\n", davPort)
-			http.ListenAndServe(":"+davPort, davHandler)
-		}()
-	}
+		fmt.Printf("WebDAV: http://[ipv4/ipv6]:%s\n", davPort)
+		http.ListenAndServe(":"+davPort, davHandler)
+	}()
 
 	{
 		httpFs, _ := os.OpenRoot(path)
 		httpMux := http.NewServeMux()
 		httpMux.Handle("/", &httpHandler{root: httpFs})
 
-		fmt.Printf("HTTP  : http://[ipv4/ipv6]:%s\n", port)
+		fmt.Printf("HTTP: http://[ipv4/ipv6]:%s\n", port)
 		http.ListenAndServe(":"+port, httpMux)
 	}
 }
