@@ -19,8 +19,6 @@ type httpHandler struct {
 }
 
 func (h *httpHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	fmt.Printf("[HTTP] %s\n", req.URL.Path)
-
 	path := strings.TrimPrefix(req.URL.Path, "/")
 	if path == "" {
 		path = "."
@@ -116,6 +114,19 @@ func (wd webdavFs) OpenFile(ctx context.Context, name string, flag int, perm os.
 	return wd.FileSystem.OpenFile(ctx, name, flag, perm)
 }
 
+func logMiddleware(tag string, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf(
+			"[%s] %s %s from %s\n",
+			tag,
+			r.Method,
+			r.URL.Path,
+			r.RemoteAddr,
+		)
+		h.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	var port, path, davPort string
 
@@ -135,8 +146,10 @@ func main() {
 			LockSystem: webdav.NewMemLS(),
 		}
 
+		hdr := logMiddleware("WEBDAV", davHandler)
+
 		fmt.Printf("WebDAV: http://[ipv4/ipv6]:%s\n", davPort)
-		http.ListenAndServe(":"+davPort, davHandler)
+		http.ListenAndServe(":"+davPort, hdr)
 	}()
 
 	{
@@ -144,7 +157,9 @@ func main() {
 		httpMux := http.NewServeMux()
 		httpMux.Handle("/", &httpHandler{root: httpFs})
 
+		hdr := logMiddleware("HTTP", httpMux)
+
 		fmt.Printf("HTTP: http://[ipv4/ipv6]:%s\n", port)
-		http.ListenAndServe(":"+port, httpMux)
+		http.ListenAndServe(":"+port, hdr)
 	}
 }
