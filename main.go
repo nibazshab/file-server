@@ -116,13 +116,7 @@ func (wd webdavFs) OpenFile(ctx context.Context, name string, flag int, perm os.
 
 func logMiddleware(tag string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Printf(
-			"[%s] %s %s from %s\n",
-			tag,
-			r.Method,
-			r.URL.Path,
-			r.RemoteAddr,
-		)
+		fmt.Printf("[%s] %s %s from %s\n", tag, r.Method, r.URL.Path, r.RemoteAddr)
 		h.ServeHTTP(w, r)
 	})
 }
