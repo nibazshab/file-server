@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -9,26 +10,28 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"golang.org/x/net/webdav"
 )
 
-type fileHandler struct {
+type httpHandler struct {
 	root *os.Root
 }
 
-func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	fmt.Printf("%s\n", req.URL.Path)
+func (h *httpHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	fmt.Printf("[HTTP] %s\n", req.URL.Path)
 
 	path := strings.TrimPrefix(req.URL.Path, "/")
 	if path == "" {
 		path = "."
 	}
 
-	fi, err := fh.root.Stat(path)
+	fi, err := h.root.Stat(path)
 	if err != nil {
 		http.NotFound(w, req)
 		return
 	}
-	f, _ := fh.root.Open(path)
+	f, _ := h.root.Open(path)
 	defer f.Close()
 
 	if !fi.IsDir() {
@@ -55,7 +58,7 @@ func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var b strings.Builder
 
 	top := "Index of " + req.URL.Path
-	b.WriteString(fmt.Sprintf("<title>%s</title><h1>%s</h1><hr>", top, top))
+	fmt.Fprintf(&b, "<title>%s</title><h1>%s</h1><hr>", top, top)
 	b.WriteString("<pre><a href=\"../\">../</a>\n")
 
 	for _, entry := range entries {
@@ -77,7 +80,7 @@ func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		i = max(51-len(name), 1)
 		j = max(20-len(size), 1)
 
-		b.WriteString(fmt.Sprintf("<a href=\"%s\">%s</a>", name, name))
+		fmt.Fprintf(&b, "<a href=\"%s\">%s</a>", name, name)
 		b.Write(padding[:i])
 		b.WriteString(time)
 		b.Write(padding[:j])
@@ -86,21 +89,63 @@ func (fh *fileHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	b.WriteString("</pre><hr>")
-	w.Write([]byte(b.String())) 
+	w.Write([]byte(b.String()))
+}
+
+type webdavFs struct {
+	webdav.FileSystem
+}
+
+func (wd webdavFs) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
+	return os.ErrPermission
+}
+
+func (wd webdavFs) RemoveAll(ctx context.Context, name string) error {
+	return os.ErrPermission
+}
+
+func (wd webdavFs) Rename(ctx context.Context, oldName, newName string) error {
+	return os.ErrPermission
+}
+
+func (wd webdavFs) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
+	if flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0 {
+		return nil, os.ErrPermission
+	}
+
+	return wd.FileSystem.OpenFile(ctx, name, flag, perm)
 }
 
 func main() {
-	var port, path string
+	var port, path, davPort string
 
-	flag.StringVar(&port, "port", "8080", "server port")
-    flag.StringVar(&path, "path", "./", "server path")
+	flag.StringVar(&port, "port", "8080", "http server port")
+	flag.StringVar(&davPort, "dav-port", "8081", "webdav server port")
+	flag.StringVar(&path, "path", "./", "server path")
 	flag.Parse()
 
 	path, _ = filepath.Abs(path)
-	rootfs, _ := os.OpenRoot(path)
 
-	fmt.Printf("ipv4/[ipv6]:%s, %s\n", port, path)
+	{
+		davHandler := &webdav.Handler{
+			FileSystem: webdavFs{
+				FileSystem: webdav.Dir(path),
+			},
+			LockSystem: webdav.NewMemLS(),
+		}
 
-	http.Handle("/", &fileHandler{root: rootfs})
-	http.ListenAndServe(":"+port, nil)
+		go func() {
+			fmt.Printf("WebDAV: http://[ipv4/ipv6]:%s\n", davPort)
+			http.ListenAndServe(":"+davPort, davHandler)
+		}()
+	}
+
+	{
+		httpFs, _ := os.OpenRoot(path)
+		httpMux := http.NewServeMux()
+		httpMux.Handle("/", &httpHandler{root: httpFs})
+
+		fmt.Printf("HTTP  : http://[ipv4/ipv6]:%s\n", port)
+		http.ListenAndServe(":"+port, httpMux)
+	}
 }
