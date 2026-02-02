@@ -56,7 +56,7 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var b strings.Builder
 
 	top := "Index of " + req.URL.Path
-	fmt.Fprintf(&b, "<title>%s</title><h1>%s</h1><hr>", top, top)
+	b.WriteString(fmt.Sprintf("<title>%s</title><h1>%s</h1><hr>", top, top))
 	b.WriteString("<pre><a href=\"../\">../</a>\n")
 
 	for _, entry := range entries {
@@ -78,7 +78,7 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		i = max(51-len(name), 1)
 		j = max(20-len(size), 1)
 
-		fmt.Fprintf(&b, "<a href=\"%s\">%s</a>", name, name)
+		b.WriteString(fmt.Sprintf("<a href=\"%s\">%s</a>", name, name))
 		b.Write(padding[:i])
 		b.WriteString(time)
 		b.Write(padding[:j])
@@ -122,7 +122,7 @@ func logMiddleware(tag string, h http.Handler) http.Handler {
 }
 
 func main() {
-	var port, path, davPort string
+	var path, port, davPort string
 
 	flag.StringVar(&davPort, "dav-port", "8081", "webdav server port")
 	flag.StringVar(&port, "port", "8080", "http server port")
@@ -143,7 +143,10 @@ func main() {
 		hdr := logMiddleware("WEBDAV", davHandler)
 
 		fmt.Printf("WebDAV: http://[ipv4/ipv6]:%s\n", davPort)
-		http.ListenAndServe(":"+davPort, hdr)
+		err := http.ListenAndServe(":"+davPort, hdr)
+		if err != nil {
+			fmt.Printf("WebDAV: ListenAndServe: %v\n", err)
+		}
 	}()
 
 	{
@@ -154,6 +157,9 @@ func main() {
 		hdr := logMiddleware("HTTP", httpMux)
 
 		fmt.Printf("HTTP: http://[ipv4/ipv6]:%s\n", port)
-		http.ListenAndServe(":"+port, hdr)
+		err := http.ListenAndServe(":"+port, hdr)
+		if err != nil {
+			fmt.Printf("HTTP: ListenAndServe: %v\n", err)
+		}
 	}
 }
