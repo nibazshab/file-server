@@ -123,7 +123,9 @@ func logMiddleware(tag string, h http.Handler) http.Handler {
 
 func main() {
 	var path, port, davPort string
+	var fileserver bool
 
+	flag.BoolVar(&fileserver, "file-server", false, "file server")
 	flag.StringVar(&davPort, "dav-port", "8081", "webdav server port")
 	flag.StringVar(&port, "port", "8080", "http server port")
 	flag.StringVar(&path, "path", "./", "server path")
@@ -150,11 +152,18 @@ func main() {
 	}()
 
 	{
-		httpFs, _ := os.OpenRoot(path)
-		httpMux := http.NewServeMux()
-		httpMux.Handle("/", &httpHandler{root: httpFs})
+		var h http.Handler
 
-		hdr := logMiddleware("HTTP", httpMux)
+		if fileserver {
+			h = http.FileServer(http.Dir(path))
+		} else {
+			httpFs, _ := os.OpenRoot(path)
+			mux := http.NewServeMux()
+			mux.Handle("/", &httpHandler{root: httpFs})
+			h = mux
+		}
+
+		hdr := logMiddleware("HTTP", h)
 
 		fmt.Printf("HTTP: http://[ipv4/ipv6]:%s\n", port)
 		err := http.ListenAndServe(":"+port, hdr)
