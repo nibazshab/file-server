@@ -14,11 +14,15 @@ import (
 	"golang.org/x/net/webdav"
 )
 
-type httpHandler struct {
+type handler struct {
 	root *os.Root
 }
 
-func (h *httpHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (h handler) Open(name string) (http.File, error) {
+	return h.root.Open(cleanPath(name))
+}
+
+func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	path := strings.TrimPrefix(req.URL.Path, "/")
 	if path == "" {
 		path = "."
@@ -90,28 +94,28 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(b.String()))
 }
 
-type webdavFs struct {
-	webdav.FileSystem
-}
-
-func (wd webdavFs) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
+func (wd handler) Mkdir(ctx context.Context, name string, perm os.FileMode) error {
 	return os.ErrPermission
 }
 
-func (wd webdavFs) RemoveAll(ctx context.Context, name string) error {
+func (wd handler) RemoveAll(ctx context.Context, name string) error {
 	return os.ErrPermission
 }
 
-func (wd webdavFs) Rename(ctx context.Context, oldName, newName string) error {
+func (wd handler) Rename(ctx context.Context, oldName, newName string) error {
 	return os.ErrPermission
 }
 
-func (wd webdavFs) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
+func (wd handler) Stat(ctx context.Context, name string) (os.FileInfo, error) {
+	return wd.root.Stat(cleanPath(name))
+}
+
+func (wd handler) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
 	if flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0 {
 		return nil, os.ErrPermission
 	}
 
-	return wd.FileSystem.OpenFile(ctx, name, flag, perm)
+	return wd.root.OpenFile(cleanPath(name), flag, perm)
 }
 
 func logMiddleware(tag string, h http.Handler) http.Handler {
@@ -119,6 +123,14 @@ func logMiddleware(tag string, h http.Handler) http.Handler {
 		fmt.Printf("[%s] %s %s from %s\n", tag, r.Method, r.URL.Path, r.RemoteAddr)
 		h.ServeHTTP(w, r)
 	})
+}
+
+func cleanPath(path string) string {
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
+		path = "."
+	}
+	return path
 }
 
 func main() {
@@ -132,43 +144,44 @@ func main() {
 	flag.Parse()
 
 	path, _ = filepath.Abs(path)
-	fmt.Printf("PATH: %s\n", path)
+	fmt.Printf("open - %s\n", path)
+
+	rootDir, _ := os.OpenRoot(path)
+	defer rootDir.Close()
+
+	rootHdr := handler{root: rootDir}
+
+	ch := make(chan error, 2)
 
 	go func() {
-		davHandler := &webdav.Handler{
-			FileSystem: webdavFs{
-				FileSystem: webdav.Dir(path),
-			},
+		wd := &webdav.Handler{
+			FileSystem: rootHdr,
 			LockSystem: webdav.NewMemLS(),
 		}
 
-		hdr := logMiddleware("WEBDAV", davHandler)
+		fmt.Printf("WebDAV - http://127.0.0.1:%s\n", davPort)
 
-		fmt.Printf("WebDAV: http://[ipv4/ipv6]:%s\n", davPort)
-		err := http.ListenAndServe(":"+davPort, hdr)
-		if err != nil {
-			fmt.Printf("WebDAV: ListenAndServe: %v\n", err)
-		}
+		ch <- http.ListenAndServe(":"+davPort, logMiddleware("WEBDAV", wd))
 	}()
 
-	{
+	go func() {
 		var h http.Handler
 
 		if fileserver {
-			h = http.FileServer(http.Dir(path))
+			h = http.FileServer(rootHdr)
 		} else {
-			httpFs, _ := os.OpenRoot(path)
 			mux := http.NewServeMux()
-			mux.Handle("/", &httpHandler{root: httpFs})
+			mux.Handle("/", &rootHdr)
 			h = mux
 		}
 
-		hdr := logMiddleware("HTTP", h)
+		fmt.Printf("HTTP - http://127.0.0.1:%s\n", port)
 
-		fmt.Printf("HTTP: http://[ipv4/ipv6]:%s\n", port)
-		err := http.ListenAndServe(":"+port, hdr)
-		if err != nil {
-			fmt.Printf("HTTP: ListenAndServe: %v\n", err)
-		}
+		ch <- http.ListenAndServe(":"+port, logMiddleware("HTTP", h))
+	}()
+
+	err := <-ch
+	if err != nil {
+		fmt.Printf("%v", err)
 	}
 }
