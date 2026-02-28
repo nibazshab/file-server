@@ -22,7 +22,7 @@ func (h handler) Open(name string) (http.File, error) {
 	return h.root.Open(cleanPath(name))
 }
 
-func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	path := strings.TrimPrefix(req.URL.Path, "/")
 	if path == "" {
 		path = "."
@@ -171,7 +171,7 @@ func main() {
 			h = http.FileServer(rootHdr)
 		} else {
 			mux := http.NewServeMux()
-			mux.Handle("/", &rootHdr)
+			mux.Handle("/", rootHdr)
 			h = mux
 		}
 
@@ -182,6 +182,6 @@ func main() {
 
 	err := <-ch
 	if err != nil {
-		fmt.Printf("%v", err)
+		fmt.Println(err)
 	}
 }
