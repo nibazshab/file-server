@@ -23,10 +23,7 @@ func (h handler) Open(name string) (http.File, error) {
 }
 
 func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	path := strings.TrimPrefix(req.URL.Path, "/")
-	if path == "" {
-		path = "."
-	}
+	path := cleanPath(req.URL.Path)
 
 	fi, err := h.root.Stat(path)
 	if err != nil {
@@ -151,8 +148,6 @@ func main() {
 
 	rootHdr := handler{root: rootDir}
 
-	ch := make(chan error, 2)
-
 	go func() {
 		wd := &webdav.Handler{
 			FileSystem: rootHdr,
@@ -161,7 +156,7 @@ func main() {
 
 		fmt.Printf("WebDAV - http://127.0.0.1:%s\n", davPort)
 
-		ch <- http.ListenAndServe(":"+davPort, logMiddleware("WEBDAV", wd))
+		http.ListenAndServe(":"+davPort, logMiddleware("WEBDAV", wd))
 	}()
 
 	go func() {
@@ -177,11 +172,8 @@ func main() {
 
 		fmt.Printf("HTTP - http://127.0.0.1:%s\n", port)
 
-		ch <- http.ListenAndServe(":"+port, logMiddleware("HTTP", h))
+		http.ListenAndServe(":"+port, logMiddleware("HTTP", h))
 	}()
 
-	err := <-ch
-	if err != nil {
-		fmt.Println(err)
-	}
+	select {}
 }
